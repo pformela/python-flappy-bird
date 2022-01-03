@@ -36,6 +36,10 @@ class Game:
                                        (self.BIRD.get_width() * self.settings.SCALE,
                                         self.BIRD.get_height() * self.settings.SCALE))
 
+        self.RESTARTING_BG = pg.Surface((self.settings.WIDTH, self.settings.HEIGHT))
+        self.RESTARTING_BG.fill((0, 0, 0))
+        self.RESTARTING_BG.convert_alpha()
+
         # Initialize game objects
         self.bird = Bird(self, self.settings)
         self.bird_group = pg.sprite.Group()
@@ -54,6 +58,10 @@ class Game:
 
         self.collision = False
 
+        self.is_restarting = False
+        self.restarting_opacity = 3
+        self.fading_in = True
+
     def draw_on_screen(self):
         self.WIN.blit(self.BACKGROUND, (0, 0))
         self.pipe_group.draw(self.WIN)
@@ -61,17 +69,21 @@ class Game:
         self.grass_group.draw(self.WIN)
         self.bird_group.draw(self.WIN)
 
+        if self.is_restarting is True:
+            self.restarting()
+
         pg.display.flip()
         self.clock.tick(self.settings.FPS)
 
     def update_screen(self):
-        if not self.collision:
-            if self.settings.move_pipes:
-                self.pipe_group.update()
-            if self.settings.move_grass:
-                self.grass_group.update()
-            if self.settings.is_bird_animating:
-                self.bird_group.update()
+        if self.is_restarting is False:
+            if self.collision is False:
+                if self.settings.move_pipes:
+                    self.pipe_group.update()
+                if self.settings.move_grass:
+                    self.grass_group.update()
+
+            self.bird_group.update()
 
     def handle_events(self):
         for event in pg.event.get():
@@ -82,27 +94,42 @@ class Game:
                 if event.key == pg.K_SPACE and not self.collision:
                     self.settings.move_pipes = True
                     self.bird.jumping()
+                if event.key == pg.K_r and self.collision is True:
+                    main()
 
     def handle_pipes(self):
-        for pipe in self.pipe_group:
-            index = len(self.pipe_group) - 1
+        if self.collision is False:
+            for pipe in self.pipe_group:
+                index = len(self.pipe_group) - 1
 
-            self.collision = True if pg.sprite.collide_mask(self.bird, pipe) is not None else False
+                self.collision = True if pg.sprite.collide_mask(self.bird, pipe) is not None else False
 
-            if self.collision:
-                self.settings.move_pipes = False
-                self.settings.move_grass = False
-                self.settings.is_bird_moving = False
-                self.settings.is_bird_animating = False
-                break
+                if self.collision:
+                    self.settings.move_pipes = False
+                    self.settings.move_grass = False
+                    self.settings.is_bird_moving = False
+                    self.settings.is_bird_animating = False
+                    break
 
-            if len(self.pipe_group) < 3 and \
-                    ((self.pipe_group.sprites())[index].rect.left < self.settings.WIDTH - self.settings.pipe_distance):
-                self.pipe_group.add(Pipe(self.settings.WIDTH,
-                                    random.randrange(self.sample_pipe.min_y, self.sample_pipe.max_y, 30),
-                                         self.settings))
-            if pipe.rect.right < 0:
-                self.pipe_group.remove(pipe)
+                if len(self.pipe_group) < 3 and ((self.pipe_group.sprites())[index].rect.left < self.settings.new_x):
+                    self.pipe_group.add(Pipe(
+                        self.settings.WIDTH,
+                        random.randrange(self.sample_pipe.min_y, self.sample_pipe.max_y, 30),
+                        self.settings))
+                if pipe.rect.right < 0:
+                    self.pipe_group.remove(pipe)
+
+    def restarting(self):
+        self.RESTARTING_BG.set_alpha(self.restarting_opacity)
+        self.WIN.blit(self.RESTARTING_BG, (0, 0))
+        if self.fading_in is True:
+            self.restarting_opacity += 0.1 if self.restarting_opacity < 1 else 0
+            if self.restarting_opacity == 1:
+                self.fading_in = False
+        elif self.fading_in is False and self.restarting_opacity > 0:
+            self.restarting_opacity -= 0.1
+        else:
+            self.is_restarting = False
 
 
 class Settings:
@@ -121,7 +148,9 @@ class Settings:
         self.pipe_min_y = -140 * self.SCALE
         self.pipe_max_y = -30 * self.SCALE
         self.pipe_distance = 83 * self.SCALE
-        self.objects_speed = 3
+        self.objects_speed = 1 * self.SCALE
+
+        self.new_x = self.WIDTH - self.pipe_distance
 
         self.is_grass_active = True
 
@@ -137,12 +166,17 @@ class Bird(pg.sprite.Sprite):
         self.game = game
         self.settings = settings
 
-        self.change_y = 1
-        self.init_up_factor = 10
+        self.init_up_factor = 3 * self.settings.SCALE
         self.init_down_factor = 1
-        self.up_factor = 10
+        self.up_factor = 3 * self.settings.SCALE
+        self.up_collision_factor = 2 * self.settings.SCALE
+        self.down_collision_factor = 1
         self.down_factor = 1
-        self.speed = 0.5
+
+        self.max_down_angle = -35
+        self.max_up_angle = 35
+        self.current_angle = 0
+        self.hit_angle = -90
 
         self.sprites = []
         self.bird1 = pg.image.load('assets/images/bird1.png')
@@ -159,29 +193,47 @@ class Bird(pg.sprite.Sprite):
         self.image = self.sprites[self.current_sprite]
         self.mask = pg.mask.from_surface(self.image)
 
+        self.height_of_ground = self.settings.HEIGHT - self.game.GRASS.get_height() - self.game.GROUND.get_height()
+
         self.pos_x = self.settings.WIDTH//4
         self.pos_y = self.settings.HEIGHT//2
         self.rect = self.image.get_rect()
         self.rect.center = [self.pos_x, self.pos_y]
 
+        self.collision_image = self.image
+        self.collision_rect = self.rect
+
     def update(self):
-        if self.settings.is_bird_moving:
-            if not self.settings.is_bird_flying_up:
-                self.rect.y += int(self.change_y * self.down_factor) \
-                    if (self.rect.bottom < self.settings.HEIGHT - self.game.GRASS.get_height() -
-                        self.game.GROUND.get_height()) else 0
-                self.down_factor += (self.speed - 0.1) if self.down_factor <= 20 else 0
-            else:
+        if self.settings.is_bird_moving is True:
+            if self.settings.is_bird_flying_up is False:
+                self.rect.y += self.down_factor if (self.rect.bottom < self.height_of_ground) else 0
+                self.down_factor += 0.4
+                if self.rect.bottom + self.down_factor > self.height_of_ground:
+                    self.rect.bottom = self.height_of_ground
+            elif self.settings.is_bird_flying_up is True:
                 self.down_factor = self.init_down_factor
                 self.move()
+        elif self.settings.is_bird_moving is False and self.game.collision is True:
+            self.hit()
 
-        if self.settings.is_bird_animating:
+        if self.settings.is_bird_animating is True:
             self.current_sprite += 0.2
 
             if self.current_sprite >= len(self.sprites):
                 self.current_sprite = 0
 
             self.image = self.sprites[int(self.current_sprite)]
+
+    def hit(self):
+        if self.up_collision_factor > 0:
+            self.rect.y -= self.up_collision_factor
+            self.up_collision_factor -= 0.5
+        else:
+            if self.rect.bottom < self.height_of_ground:
+                self.rect.y += self.down_collision_factor
+                self.down_collision_factor += 0.4
+                if self.rect.bottom + self.down_factor > self.height_of_ground:
+                    self.rect.bottom = self.height_of_ground
 
     def jumping(self):
         self.settings.is_bird_moving = True
@@ -190,11 +242,18 @@ class Bird(pg.sprite.Sprite):
 
     def move(self):
         if self.up_factor >= 1:
-            self.rect.y -= int(self.change_y * self.up_factor) if self.rect.y > 0 else 0
-            self.up_factor -= (self.speed + 0.1)
+            self.rect.y -= self.up_factor if self.rect.y > 0 else 0
+            self.up_factor -= 0.5
+            if self.rect.y - self.up_factor <= 0:
+                self.rect.y = 0
         else:
             self.up_factor = self.init_up_factor
             self.settings.is_bird_flying_up = False
+
+    def rotate(self, surface, angle):
+        rotated_surface = pg.transform.rotozoom(surface, angle, 1)
+        rotated_rect = rotated_surface.get_rect(center=(self.rect.centerx, self.rect.centery))
+        return rotated_surface, rotated_rect
 
 
 class Pipe(pg.sprite.Sprite):
