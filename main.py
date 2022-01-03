@@ -2,6 +2,8 @@ import pygame as pg
 import sys
 import random
 
+pg.mixer.init()
+
 
 class Game:
 
@@ -37,8 +39,17 @@ class Game:
                                         self.BIRD.get_height() * self.settings.SCALE))
 
         self.RESTARTING_BG = pg.Surface((self.settings.WIDTH, self.settings.HEIGHT))
-        self.RESTARTING_BG.fill((0, 0, 0))
+        self.RESTARTING_BG.fill((17, 17, 17))
         self.RESTARTING_BG.convert_alpha()
+
+        self.HIT_BG = pg.Surface((self.settings.WIDTH, self.settings.HEIGHT))
+        self.HIT_BG.fill((255, 255, 255))
+        self.HIT_BG.convert_alpha()
+
+        # Initialize sounds
+        self.HIT_SOUND = pg.mixer.Sound('assets/sounds/hit.mp3')
+        self.POINT_SOUND = pg.mixer.Sound('assets/sounds/point.mp3')
+        self.WHOOSH_SOUND = pg.mixer.Sound('assets/sounds/whoosh.mp3')
 
         # Initialize game objects
         self.bird = Bird(self, self.settings)
@@ -61,6 +72,7 @@ class Game:
         self.is_restarting = False
         self.restarting_opacity = 3
         self.fading_in = True
+        self.i = 0
 
     def draw_on_screen(self):
         self.WIN.blit(self.BACKGROUND, (0, 0))
@@ -72,18 +84,20 @@ class Game:
         if self.is_restarting is True:
             self.restarting()
 
+        if self.collision is True:
+            self.bird_hit_foreground()
+
         pg.display.flip()
         self.clock.tick(self.settings.FPS)
 
     def update_screen(self):
-        if self.is_restarting is False:
-            if self.collision is False:
-                if self.settings.move_pipes:
-                    self.pipe_group.update()
-                if self.settings.move_grass:
-                    self.grass_group.update()
+        if self.collision is False:
+            if self.settings.move_pipes:
+                self.pipe_group.update()
+            if self.settings.move_grass:
+                self.grass_group.update()
 
-            self.bird_group.update()
+        self.bird_group.update()
 
     def handle_events(self):
         for event in pg.event.get():
@@ -94,8 +108,10 @@ class Game:
                 if event.key == pg.K_SPACE and not self.collision:
                     self.settings.move_pipes = True
                     self.bird.jumping()
-                if event.key == pg.K_r and self.collision is True:
-                    main()
+                    self.WHOOSH_SOUND.play()
+                if event.key == pg.K_r and self.collision is True and self.settings.can_restart is True:
+                    self.is_restarting = True
+                    self.fading_in = True
 
     def handle_pipes(self):
         if self.collision is False:
@@ -105,6 +121,7 @@ class Game:
                 self.collision = True if pg.sprite.collide_mask(self.bird, pipe) is not None else False
 
                 if self.collision:
+                    self.HIT_SOUND.play()
                     self.settings.move_pipes = False
                     self.settings.move_grass = False
                     self.settings.is_bird_moving = False
@@ -119,17 +136,38 @@ class Game:
                 if pipe.rect.right < 0:
                     self.pipe_group.remove(pipe)
 
+    def bird_hit_foreground(self):
+        self.WIN.blit(self.HIT_BG, (0, 0))
+        self.HIT_BG.set_alpha(self.bird.fade_in_alpha)
+        self.bird.fade_in_alpha -= 8 if self.bird.fade_in_alpha > 0 else 0
+
     def restarting(self):
-        self.RESTARTING_BG.set_alpha(self.restarting_opacity)
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
-        if self.fading_in is True:
-            self.restarting_opacity += 0.1 if self.restarting_opacity < 1 else 0
-            if self.restarting_opacity == 1:
+        if self.fading_in is True and self.i <= 255:
+            self.RESTARTING_BG.set_alpha(self.i)
+            self.i += 15
+            if self.i == 255:
                 self.fading_in = False
-        elif self.fading_in is False and self.restarting_opacity > 0:
-            self.restarting_opacity -= 0.1
-        else:
+                self.initialize()
+        elif self.fading_in is False and self.i > 0:
+            self.RESTARTING_BG.set_alpha(self.i)
+            self.i -= 15
+        elif self.i == 0 and self.fading_in is False:
             self.is_restarting = False
+
+    def initialize(self):
+        self.bird = Bird(self, self.settings)
+        self.bird_group = pg.sprite.Group()
+        self.bird_group.add(self.bird)
+
+        self.collision = False
+        self.settings.move_grass = True
+        self.settings.can_restart = False
+        self.settings.is_bird_animating = True
+
+        self.first_pipe = Pipe(800, random.randrange(-420, -90, 30), self.settings)
+        self.pipe_group = pg.sprite.Group()
+        self.pipe_group.add(self.first_pipe)
 
 
 class Settings:
@@ -157,6 +195,8 @@ class Settings:
         self.is_bird_moving = False
         self.is_bird_flying_up = False
         self.is_bird_animating = True
+
+        self.can_restart = False
 
 
 class Bird(pg.sprite.Sprite):
@@ -200,8 +240,7 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = [self.pos_x, self.pos_y]
 
-        self.collision_image = self.image
-        self.collision_rect = self.rect
+        self.fade_in_alpha = 196
 
     def update(self):
         if self.settings.is_bird_moving is True:
@@ -234,6 +273,7 @@ class Bird(pg.sprite.Sprite):
                 self.down_collision_factor += 0.4
                 if self.rect.bottom + self.down_factor > self.height_of_ground:
                     self.rect.bottom = self.height_of_ground
+                    self.settings.can_restart = True
 
     def jumping(self):
         self.settings.is_bird_moving = True
