@@ -52,7 +52,15 @@ class Game:
         self.WHOOSH_SOUND = pg.mixer.Sound('assets/sounds/whoosh.mp3')
 
         # Initialize game objects
-        self.bird = Bird(self, self.settings)
+        self.current_points = 0
+        self.highest_score = 0
+
+        self.points = Points(self.settings, 0)
+        self.last_digit = Points(self.settings, 0)
+        self.point_group = pg.sprite.Group()
+        self.point_group.add(self.last_digit)
+
+        self.bird = Bird(self, self.settings, self.points)
         self.bird_group = pg.sprite.Group()
         self.bird_group.add(self.bird)
 
@@ -63,7 +71,7 @@ class Game:
         self.grass_group.add(self.grass_second)
 
         self.sample_pipe = Pipe(-100, random.randrange(-420, -90, 30), self.settings)
-        self.first_pipe = Pipe(800, random.randrange(-420, -90, 30), self.settings)
+        self.first_pipe = Pipe(400, random.randrange(-420, -90, 30), self.settings)
         self.pipe_group = pg.sprite.Group()
         self.pipe_group.add(self.first_pipe)
 
@@ -80,6 +88,7 @@ class Game:
         self.WIN.blit(self.GROUND, (0, self.settings.HEIGHT - self.GROUND.get_height()))
         self.grass_group.draw(self.WIN)
         self.bird_group.draw(self.WIN)
+        self.point_group.draw(self.WIN)
 
         if self.is_restarting is True:
             self.restarting()
@@ -96,7 +105,8 @@ class Game:
                 self.pipe_group.update()
             if self.settings.move_grass:
                 self.grass_group.update()
-
+        self.last_digit.current_number = self.current_points
+        self.point_group.update()
         self.bird_group.update()
 
     def handle_events(self):
@@ -141,6 +151,12 @@ class Game:
         self.HIT_BG.set_alpha(self.bird.fade_in_alpha)
         self.bird.fade_in_alpha -= 8 if self.bird.fade_in_alpha > 0 else 0
 
+    def gain_point(self):
+        pipe_x = (self.pipe_group.sprites())[0].rect.centerx
+        if self.bird.rect.centerx >= pipe_x >= self.bird.rect.centerx - 2 and self.collision is not True:
+            self.POINT_SOUND.play()
+            self.current_points += 1
+
     def restarting(self):
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
         if self.fading_in is True and self.i <= 255:
@@ -156,7 +172,10 @@ class Game:
             self.is_restarting = False
 
     def initialize(self):
-        self.bird = Bird(self, self.settings)
+
+        self.current_points = 0
+
+        self.bird = Bird(self, self.settings, self.points)
         self.bird_group = pg.sprite.Group()
         self.bird_group.add(self.bird)
 
@@ -199,12 +218,64 @@ class Settings:
         self.can_restart = False
 
 
+class Points(pg.sprite.Sprite):
+
+    def __init__(self, settings, current_number):
+        super().__init__()
+        self.settings = settings
+
+        self.current_number = current_number
+
+        self.zero = pg.image.load("assets/images/numbers/0.png")
+        self.zero = pg.transform.scale(
+            self.zero, (self.zero.get_width() * self.settings.SCALE, self.zero.get_height() * self.settings.SCALE))
+        self.one = pg.image.load("assets/images/numbers/1.png")
+        self.one = pg.transform.scale(
+            self.one, (self.zero.get_width(), self.zero.get_height()))
+        self.two = pg.image.load("assets/images/numbers/2.png")
+        self.two = pg.transform.scale(
+            self.two, (self.zero.get_width(), self.zero.get_height()))
+        self.three = pg.image.load("assets/images/numbers/3.png")
+        self.three = pg.transform.scale(
+            self.three, (self.zero.get_width(), self.zero.get_height()))
+        self.four = pg.image.load("assets/images/numbers/4.png")
+        self.four = pg.transform.scale(
+            self.four, (self.zero.get_width(), self.zero.get_height()))
+        self.five = pg.image.load("assets/images/numbers/5.png")
+        self.five = pg.transform.scale(
+            self.five, (self.zero.get_width(), self.zero.get_height()))
+        self.six = pg.image.load("assets/images/numbers/6.png")
+        self.six = pg.transform.scale(
+            self.six, (self.zero.get_width(), self.zero.get_height()))
+        self.seven = pg.image.load("assets/images/numbers/7.png")
+        self.seven = pg.transform.scale(
+            self.seven, (self.zero.get_width(), self.zero.get_height()))
+        self.eight = pg.image.load("assets/images/numbers/8.png")
+        self.eight = pg.transform.scale(
+            self.eight, (self.zero.get_width(), self.zero.get_height()))
+        self.nine = pg.image.load("assets/images/numbers/9.png")
+        self.nine = pg.transform.scale(
+            self.nine, (self.zero.get_width(), self.zero.get_height()))
+
+        self.images_list = [self.zero, self.one, self.two, self.three, self.four, self.five, self.six, self.seven,
+                            self.eight, self.nine]
+        self.image = self.images_list[self.current_number]
+        self.rect = self.image.get_rect()
+        self.rect.centery = self.settings.HEIGHT//8
+        self.rect.centerx = self.settings.WIDTH//2
+        # self.digits_list = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+
+    def update(self):
+        self.image = self.images_list[self.current_number]
+
+
 class Bird(pg.sprite.Sprite):
 
-    def __init__(self, game, settings):
+    def __init__(self, game, settings, points):
         super().__init__()
         self.game = game
         self.settings = settings
+        self.points = points
 
         self.init_up_factor = 3 * self.settings.SCALE
         self.init_down_factor = 1
@@ -244,6 +315,9 @@ class Bird(pg.sprite.Sprite):
 
     def update(self):
         if self.settings.is_bird_moving is True:
+
+            self.game.gain_point()
+
             if self.settings.is_bird_flying_up is False:
                 self.rect.y += self.down_factor if (self.rect.bottom < self.height_of_ground) else 0
                 self.down_factor += 0.4
