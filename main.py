@@ -59,6 +59,7 @@ class Game:
         self.last_digit = Points(self.settings, 0)
         self.point_group = pg.sprite.Group()
         self.point_group.add(self.last_digit)
+        self.current_num_of_digits = 1
 
         self.bird = Bird(self, self.settings, self.points)
         self.bird_group = pg.sprite.Group()
@@ -105,8 +106,7 @@ class Game:
                 self.pipe_group.update()
             if self.settings.move_grass:
                 self.grass_group.update()
-        self.last_digit.current_number = self.current_points
-        self.point_group.update()
+        self.update_score()
         self.bird_group.update()
 
     def handle_events(self):
@@ -156,6 +156,15 @@ class Game:
         if self.bird.rect.centerx >= pipe_x >= self.bird.rect.centerx - 2 and self.collision is not True:
             self.POINT_SOUND.play()
             self.current_points += 1
+            self.current_num_of_digits = len(str(self.current_points))
+
+    def update_score(self):
+        for i in range(self.current_num_of_digits):
+            if len(self.point_group.sprites()) < self.current_num_of_digits:
+                self.point_group.add(Points(self.settings, 1))
+            x = int(self.settings.WIDTH//2 - self.current_num_of_digits * self.last_digit.image.get_width() +
+                    i * self.last_digit.image.get_width() + self.last_digit.image.get_width())
+            self.point_group.sprites()[i].update(x, int(str(self.current_points)[i]))
 
     def restarting(self):
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
@@ -265,8 +274,10 @@ class Points(pg.sprite.Sprite):
         self.rect.centerx = self.settings.WIDTH//2
         # self.digits_list = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 
-    def update(self):
+    def update(self, pos_x, number):
+        self.current_number = number
         self.image = self.images_list[self.current_number]
+        self.rect.centerx = pos_x
 
 
 class Bird(pg.sprite.Sprite):
