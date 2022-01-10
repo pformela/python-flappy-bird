@@ -2,9 +2,9 @@ import pygame as pg
 import sys
 import random
 
-# pg.mixer.pre_init(frequency=44100)
-# pg.init()
-# pg.mixer.init(frequency=44100)
+pg.mixer.pre_init(frequency=44100)
+pg.init()
+pg.mixer.init(frequency=44100)
 
 
 class Game:
@@ -72,7 +72,7 @@ class Game:
         self.WHOOSH_SOUND = pg.mixer.Sound('assets/sounds/whoosh.mp3')
 
         # Initialize game objects
-        self.current_points = 0
+        self.current_points = 999
         self.high_score = 0
 
         self.sample_small = Points(self.settings, 0, 0, 1, 0, 0)
@@ -83,6 +83,8 @@ class Game:
         self.point_group.add(self.last_digit)
         self.len_score = len(str(self.current_points))
         self.points_alpha = 0
+        self.small_points_alpha = 0
+        self.are_points_updated = False
 
         self.best_score_group = pg.sprite.Group()
         self.current_score_group = pg.sprite.Group()
@@ -106,6 +108,7 @@ class Game:
 
         self.start_game = False
 
+        self.wait_for_scoreboard = 60
         self.is_restarting = False
         self.restarting_opacity = 3
         self.fading_in = True
@@ -151,7 +154,7 @@ class Game:
                     self.start_game = True
                     self.settings.move_pipes = True
                     self.bird.jumping()
-                    # self.WHOOSH_SOUND.play()
+                    self.WHOOSH_SOUND.play()
                 if event.key == pg.K_r and self.collision is True and self.settings.can_restart is True:
                     self.is_restarting = True
                     self.fading_in = True
@@ -166,7 +169,7 @@ class Game:
                 if self.collision:
                     self.high_score = self.current_points if self.current_points > self.high_score else self.high_score
                     print("{} {}".format(self.current_points, self.high_score))
-                    # self.HIT_SOUND.play()
+                    self.HIT_SOUND.play()
                     self.settings.move_pipes = False
                     self.settings.move_grass = False
                     self.settings.is_bird_moving = False
@@ -189,7 +192,7 @@ class Game:
     def gain_point(self):
         pipe_x = (self.pipe_group.sprites())[0].rect.centerx
         if self.bird.rect.centerx >= pipe_x >= self.bird.rect.centerx - 2 and self.collision is not True:
-            # self.POINT_SOUND.play()
+            self.POINT_SOUND.play()
             self.current_points += 1
             self.len_score = len(str(self.current_points))
 
@@ -216,19 +219,26 @@ class Game:
             self.points_alpha += 15 if self.points_alpha < 255 else 0
 
     def scoreboard_screen(self):
-        self.WIN.blit(self.SCOREBOARD, (self.scoreboard_x, self.scoreboard_y))
-        if self.scoreboard_y > self.settings.HEIGHT * 0.3:
-            self.scoreboard_y -= self.scoreboard_change
-            self.scoreboard_change -= 2.5
-        # else:
-        #     if len(self.current_score_group.sprites()) == 0:
-        #         for i in range(len(str(self.current_points))):
-        #             self.current_score_group.add(
-        #                 0, Points(self.settings, int(str(self.current_points)[i]), 0, 1, 40,
-        #                           40 + self.sample_small.image.get_width() * i))
-        #         # for i in range(len(self.current_score_group.sprites())):
-        #         #     self.current_score_group.sprites()[i].update(int(str(self.current_points)[i]))
-        #         #
+        if self.wait_for_scoreboard > 0:
+            self.wait_for_scoreboard -= 1
+        else:
+            self.WIN.blit(self.SCOREBOARD, (self.scoreboard_x, self.scoreboard_y))
+            if self.scoreboard_y > self.settings.HEIGHT * 0.3:
+                self.scoreboard_y -= self.scoreboard_change
+                self.scoreboard_change -= 2.5
+            else:
+                for item in self.current_score_group.sprites():
+                    item.image.set_alpha(self.small_points_alpha)
+                self.small_points_alpha += 5 if self.small_points_alpha < 255 else 0
+
+            if self.are_points_updated is False:
+                for i in range(len(str(self.current_points))):
+                    print(str(self.current_points)[i])
+                    self.current_score_group.add(
+                        Points(self.settings, int(str(self.current_points)[i]), 0, 1,
+                               114 * self.settings.SCALE - (self.len_score-i-1) * self.sample_small.image.get_width()+2,
+                               96 * self.settings.SCALE))
+                self.are_points_updated = True
 
     def get_ready_screen(self):
         self.WIN.blit(self.GET_READY, (self.settings.WIDTH//2 - self.GET_READY.get_width()//2, self.settings.HEIGHT//6))
@@ -239,6 +249,8 @@ class Game:
     def restarting(self):
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
         if self.fading_in is True and self.i <= 255:
+            for item in self.current_score_group.sprites():
+                item.image.set_alpha(self.i * 2)
             self.RESTARTING_BG.set_alpha(self.i)
             self.SCOREBOARD.set_alpha(255-self.i)
             self.i += 15
@@ -257,11 +269,15 @@ class Game:
 
         self.current_points = 0
         self.len_score = len(str(self.current_points))
+        self.current_score_group = pg.sprite.Group()
         self.get_ready_alpha = 255
         self.start_game = False
         self.points_alpha = 0
+        self.small_points_alpha = 0
         self.scoreboard_y = self.settings.HEIGHT
-        self.scoreboard_change = 60
+        self.scoreboard_change = 55
+        self.wait_for_scoreboard = 60
+        self.are_points_updated = False
 
         self.bird = Bird(self, self.settings)
         self.bird_group = pg.sprite.Group()
@@ -350,33 +366,33 @@ class Points(pg.sprite.Sprite):
         self.small_zero = pg.image.load('assets/images/numbers/0-small.png')
         self.small_zero = pg.transform.scale(self.small_zero, (self.small_zero.get_width() * self.settings.SCALE,
                                                                self.small_zero.get_height() * self.settings.SCALE))
-        self.small_one = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_one = pg.transform.scale(self.small_one, (self.small_zero.get_width() * self.settings.SCALE,
-                                                             self.small_zero.get_height() * self.settings.SCALE))
-        self.small_two = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_two = pg.transform.scale(self.small_two, (self.small_zero.get_width() * self.settings.SCALE,
-                                                             self.small_zero.get_height() * self.settings.SCALE))
-        self.small_three = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_three = pg.transform.scale(self.small_three, (self.small_zero.get_width() * self.settings.SCALE,
-                                                                 self.small_zero.get_height() * self.settings.SCALE))
-        self.small_four = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_four = pg.transform.scale(self.small_four, (self.small_zero.get_width() * self.settings.SCALE,
-                                                               self.small_zero.get_height() * self.settings.SCALE))
-        self.small_five = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_five = pg.transform.scale(self.small_five, (self.small_zero.get_width() * self.settings.SCALE,
-                                                               self.small_zero.get_height() * self.settings.SCALE))
-        self.small_six = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_six = pg.transform.scale(self.small_six, (self.small_zero.get_width() * self.settings.SCALE,
-                                                             self.small_zero.get_height() * self.settings.SCALE))
-        self.small_seven = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_seven = pg.transform.scale(self.small_seven, (self.small_zero.get_width() * self.settings.SCALE,
-                                                                 self.small_zero.get_height() * self.settings.SCALE))
-        self.small_eight = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_eight = pg.transform.scale(self.small_eight, (self.small_zero.get_width() * self.settings.SCALE,
-                                                                 self.small_zero.get_height() * self.settings.SCALE))
-        self.small_nine = pg.image.load('assets/images/numbers/0-small.png')
-        self.small_nine = pg.transform.scale(self.small_nine, (self.small_zero.get_width() * self.settings.SCALE,
-                                                               self.small_zero.get_height() * self.settings.SCALE))
+        self.small_one = pg.image.load('assets/images/numbers/1-small.png')
+        self.small_one = pg.transform.scale(self.small_one,
+                                            (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_two = pg.image.load('assets/images/numbers/2-small.png')
+        self.small_two = pg.transform.scale(self.small_two,
+                                            (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_three = pg.image.load('assets/images/numbers/3-small.png')
+        self.small_three = pg.transform.scale(self.small_three,
+                                              (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_four = pg.image.load('assets/images/numbers/4-small.png')
+        self.small_four = pg.transform.scale(self.small_four,
+                                             (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_five = pg.image.load('assets/images/numbers/5-small.png')
+        self.small_five = pg.transform.scale(self.small_five,
+                                             (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_six = pg.image.load('assets/images/numbers/6-small.png')
+        self.small_six = pg.transform.scale(self.small_six,
+                                            (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_seven = pg.image.load('assets/images/numbers/7-small.png')
+        self.small_seven = pg.transform.scale(self.small_seven,
+                                              (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_eight = pg.image.load('assets/images/numbers/8-small.png')
+        self.small_eight = pg.transform.scale(self.small_eight,
+                                              (self.small_zero.get_width(), self.small_zero.get_height()))
+        self.small_nine = pg.image.load('assets/images/numbers/9-small.png')
+        self.small_nine = pg.transform.scale(self.small_nine,
+                                             (self.small_zero.get_width(), self.small_zero.get_height()))
 
         if size == 0:
             self.images_list = [self.zero, self.one, self.two, self.three, self.four, self.five, self.six, self.seven,
@@ -387,6 +403,7 @@ class Points(pg.sprite.Sprite):
 
         self.image = self.images_list[self.current_number]
         self.image.convert_alpha()
+        self.image.set_alpha(alpha)
         self.rect = self.image.get_rect()
 
         if size == 0:
