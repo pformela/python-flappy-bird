@@ -46,6 +46,15 @@ class Game:
         self.HIT_BG.fill((255, 255, 255))
         self.HIT_BG.convert_alpha()
 
+        self.GET_READY = pg.image.load('assets/images/getready.png')
+        self.GET_READY = pg.transform.scale(self.GET_READY, (self.GET_READY.get_width() * self.settings.SCALE,
+                                                            self.GET_READY.get_height() * self.settings.SCALE))
+        self.GET_READY.convert_alpha()
+        self.get_ready_alpha = 255
+        self.GET_READY_RECT = self.GET_READY.get_rect()
+        self.GET_READY_RECT.centerx = self.settings.WIDTH//2
+        self.GET_READY_RECT.centery = self.settings.HEIGHT//8
+
         # Initialize sounds
         self.HIT_SOUND = pg.mixer.Sound('assets/sounds/hit.mp3')
         self.POINT_SOUND = pg.mixer.Sound('assets/sounds/point.mp3')
@@ -55,13 +64,14 @@ class Game:
         self.current_points = 0
         self.highest_score = 0
 
-        self.points = Points(self.settings, 0)
-        self.last_digit = Points(self.settings, 0)
+        self.points = Points(self.settings, 0, 0)
+        self.last_digit = Points(self.settings, 0, 0)
         self.point_group = pg.sprite.Group()
         self.point_group.add(self.last_digit)
-        self.current_num_of_digits = 1
+        self.len_score = len(str(self.current_points))
+        self.points_alpha = 0
 
-        self.bird = Bird(self, self.settings, self.points)
+        self.bird = Bird(self, self.settings)
         self.bird_group = pg.sprite.Group()
         self.bird_group.add(self.bird)
 
@@ -77,6 +87,8 @@ class Game:
         self.pipe_group.add(self.first_pipe)
 
         self.collision = False
+
+        self.start_game = False
 
         self.is_restarting = False
         self.restarting_opacity = 3
@@ -97,6 +109,8 @@ class Game:
         if self.collision is True:
             self.bird_hit_foreground()
 
+        self.get_ready_screen()
+
         pg.display.flip()
         self.clock.tick(self.settings.FPS)
 
@@ -116,6 +130,7 @@ class Game:
                 sys.exit()
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_SPACE and not self.collision:
+                    self.start_game = True
                     self.settings.move_pipes = True
                     self.bird.jumping()
                     self.WHOOSH_SOUND.play()
@@ -156,15 +171,36 @@ class Game:
         if self.bird.rect.centerx >= pipe_x >= self.bird.rect.centerx - 2 and self.collision is not True:
             self.POINT_SOUND.play()
             self.current_points += 1
-            self.current_num_of_digits = len(str(self.current_points))
+            self.len_score = len(str(self.current_points))
 
     def update_score(self):
-        for i in range(self.current_num_of_digits):
-            if len(self.point_group.sprites()) < self.current_num_of_digits:
-                self.point_group.add(Points(self.settings, 1))
-            x = int(self.settings.WIDTH//2 - self.current_num_of_digits * self.last_digit.image.get_width() +
-                    i * self.last_digit.image.get_width() + self.last_digit.image.get_width())
-            self.point_group.sprites()[i].update(x, int(str(self.current_points)[i]))
+        for i in range(self.len_score):
+            print(self.points_alpha)
+            curr_sprite = self.point_group.sprites()[i]
+            if len(self.point_group.sprites()) < self.len_score:
+                self.point_group.add(Points(self.settings, 1, 255))
+            if self.len_score % 2 == 0:
+                x = (int(self.settings.WIDTH//2 - (self.len_score/2) * self.points.width + self.points.width * i +
+                         self.points.width//2))
+            else:
+                x = (int(self.settings.WIDTH//2 - self.len_score//2 * self.points.width + i * self.points.width))
+            if self.start_game is True:
+                curr_sprite.update(x, int(str(self.current_points)[i]), self.points_alpha)
+            elif self.collision is True:
+                curr_sprite.update(x, int(str(self.current_points)[i]), self.points_alpha)
+            else:
+                curr_sprite.update(x, int(str(self.current_points)[i]), 0)
+
+        if self.collision is True and self.bird.rect.bottom + 10 >= self.grass_first.rect.y:
+            self.points_alpha -= 15 if self.points_alpha > 0 else 0
+        elif self.start_game is True and self.collision is False:
+            self.points_alpha += 15 if self.points_alpha < 255 else 0
+
+    def get_ready_screen(self):
+        self.WIN.blit(self.GET_READY, (self.settings.WIDTH//2 - self.GET_READY.get_width()//2, self.settings.HEIGHT//6))
+        if self.start_game is True and self.get_ready_alpha >= 0:
+            self.GET_READY.set_alpha(self.get_ready_alpha)
+            self.get_ready_alpha -= 15
 
     def restarting(self):
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
@@ -176,6 +212,7 @@ class Game:
                 self.initialize()
         elif self.fading_in is False and self.i > 0:
             self.RESTARTING_BG.set_alpha(self.i)
+            self.GET_READY.set_alpha(255 - self.i)
             self.i -= 15
         elif self.i == 0 and self.fading_in is False:
             self.is_restarting = False
@@ -183,8 +220,11 @@ class Game:
     def initialize(self):
 
         self.current_points = 0
+        self.get_ready_alpha = 255
+        self.start_game = False
+        self.points_alpha = 0
 
-        self.bird = Bird(self, self.settings, self.points)
+        self.bird = Bird(self, self.settings)
         self.bird_group = pg.sprite.Group()
         self.bird_group.add(self.bird)
 
@@ -193,7 +233,8 @@ class Game:
         self.settings.can_restart = False
         self.settings.is_bird_animating = True
 
-        self.first_pipe = Pipe(800, random.randrange(-420, -90, 30), self.settings)
+        self.first_pipe = Pipe(self.settings.pipe_distance * self.settings.SCALE,
+                               random.randrange(-420, -90, 30), self.settings)
         self.pipe_group = pg.sprite.Group()
         self.pipe_group.add(self.first_pipe)
 
@@ -229,7 +270,7 @@ class Settings:
 
 class Points(pg.sprite.Sprite):
 
-    def __init__(self, settings, current_number):
+    def __init__(self, settings, current_number, alpha):
         super().__init__()
         self.settings = settings
 
@@ -237,7 +278,8 @@ class Points(pg.sprite.Sprite):
 
         self.zero = pg.image.load("assets/images/numbers/0.png")
         self.zero = pg.transform.scale(
-            self.zero, (self.zero.get_width() * self.settings.SCALE, self.zero.get_height() * self.settings.SCALE))
+            self.zero, (self.zero.get_width() * (self.settings.SCALE/2 + 1),
+                        self.zero.get_height() * (self.settings.SCALE/2 + 1)))
         self.one = pg.image.load("assets/images/numbers/1.png")
         self.one = pg.transform.scale(
             self.one, (self.zero.get_width(), self.zero.get_height()))
@@ -269,24 +311,27 @@ class Points(pg.sprite.Sprite):
         self.images_list = [self.zero, self.one, self.two, self.three, self.four, self.five, self.six, self.seven,
                             self.eight, self.nine]
         self.image = self.images_list[self.current_number]
+        self.image.convert_alpha()
         self.rect = self.image.get_rect()
-        self.rect.centery = self.settings.HEIGHT//8
+        self.rect.centery = self.settings.HEIGHT//10
         self.rect.centerx = self.settings.WIDTH//2
-        # self.digits_list = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 
-    def update(self, pos_x, number):
+        self.width = self.zero.get_width()
+
+    def update(self, pos_x, number, alpha):
         self.current_number = number
         self.image = self.images_list[self.current_number]
+        self.image.convert_alpha()
+        self.image.set_alpha(alpha)
         self.rect.centerx = pos_x
 
 
 class Bird(pg.sprite.Sprite):
 
-    def __init__(self, game, settings, points):
+    def __init__(self, game, settings):
         super().__init__()
         self.game = game
         self.settings = settings
-        self.points = points
 
         self.init_up_factor = 3 * self.settings.SCALE
         self.init_down_factor = 1
@@ -294,11 +339,6 @@ class Bird(pg.sprite.Sprite):
         self.up_collision_factor = 2 * self.settings.SCALE
         self.down_collision_factor = 1
         self.down_factor = 1
-
-        self.max_down_angle = -35
-        self.max_up_angle = 35
-        self.current_angle = 0
-        self.hit_angle = -90
 
         self.sprites = []
         self.bird1 = pg.image.load('assets/images/bird1.png')
@@ -374,11 +414,6 @@ class Bird(pg.sprite.Sprite):
         else:
             self.up_factor = self.init_up_factor
             self.settings.is_bird_flying_up = False
-
-    def rotate(self, surface, angle):
-        rotated_surface = pg.transform.rotozoom(surface, angle, 1)
-        rotated_rect = rotated_surface.get_rect(center=(self.rect.centerx, self.rect.centery))
-        return rotated_surface, rotated_rect
 
 
 class Pipe(pg.sprite.Sprite):
