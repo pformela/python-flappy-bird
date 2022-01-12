@@ -1,12 +1,12 @@
 import pygame as pg
 import sys
 import random as r
+import pickle
 from settings import Settings
 from bird import Bird
 from ground import Ground
 from pipe import Pipe
 from points import Points
-
 
 pg.mixer.pre_init(frequency=44100)
 pg.init()
@@ -55,13 +55,32 @@ class Game:
                                                      self.SPACE.get_height() * self.s.SCALE))
         self.SPACE.convert_alpha()
 
+        self.BROWN = pg.image.load('assets/images/brown.png')
+        self.BROWN = pg.transform.scale(self.BROWN, (self.BROWN.get_width() * self.s.SCALE,
+                                                     self.BROWN.get_height() * self.s.SCALE))
+        self.BROWN.convert_alpha()
+        self.BROWN.set_alpha(0)
+        self.SILVER = pg.image.load('assets/images/silver.png')
+        self.SILVER = pg.transform.scale(self.SILVER, (self.SILVER.get_width() * self.s.SCALE,
+                                                       self.SILVER.get_height() * self.s.SCALE))
+        self.SILVER.convert_alpha()
+        self.SILVER.set_alpha(0)
+        self.GOLDEN = pg.image.load('assets/images/gold.png')
+        self.GOLDEN = pg.transform.scale(self.GOLDEN, (self.GOLDEN.get_width() * self.s.SCALE,
+                                                       self.GOLDEN.get_height() * self.s.SCALE))
+        self.GOLDEN.convert_alpha()
+        self.GOLDEN.set_alpha(0)
+
+        self.medals = [self.BROWN, self.SILVER, self.GOLDEN]
+        self.medal_image = None
+
         # Initialize scoreboard
         self.SCOREBOARD = pg.image.load('assets/images/scoreboard.png')
         self.SCOREBOARD = pg.transform.scale(self.SCOREBOARD, (self.SCOREBOARD.get_width() * self.s.SCALE,
                                                                self.SCOREBOARD.get_height() * self.s.SCALE))
         self.SCOREBOARD.convert_alpha()
         self.scoreboard_y = self.s.HEIGHT
-        self.scoreboard_x = self.s.WIDTH//2 - self.SCOREBOARD.get_width()//2
+        self.scoreboard_x = self.s.WIDTH // 2 - self.SCOREBOARD.get_width() // 2
         self.scoreboard_y_change = 55
         self.scoreboard_alpha = 255
 
@@ -72,7 +91,6 @@ class Game:
 
         # Initialize game objects
         self.current_points = 0
-        self.high_score = 0
 
         self.small_point = Points(self.s, 0, 0, 1, 0, 0)
         self.point = Points(self.s, 0, 0)
@@ -88,6 +106,18 @@ class Game:
 
         self.high_score_group = pg.sprite.Group()
         self.current_score_group = pg.sprite.Group()
+
+        try:
+            with open('high_score.json', 'rb') as file:
+                self.high_score = pickle.load(file)
+
+            for i in range(len(str(self.high_score))):
+                self.high_score_group.add(
+                    Points(self.s, int(str(self.high_score)[i]), 0, 1,
+                           114 * self.s.SCALE - (len(str(self.high_score)) - i - 1) * self.small_point.w * 0.7 + 2,
+                           117 * self.s.SCALE))
+        except:
+            self.high_score = 0
 
         self.bird = Bird(self, self.s)
         self.bird_group = pg.sprite.Group()
@@ -112,6 +142,8 @@ class Game:
     def handle_events(self):
         for event in pg.event.get():
             if event.type == pg.QUIT:
+                with open('high_score.json', 'wb') as file:
+                    pickle.dump(self.high_score, file)
                 pg.quit()
                 sys.exit()
             if event.type == pg.KEYDOWN:
@@ -148,6 +180,7 @@ class Game:
         if self.collision is True:
             self.flash()
             self.show_scoreboard()
+            self.show_medal()
             self.current_score_group.draw(self.WIN)
             self.high_score_group.draw(self.WIN)
 
@@ -232,6 +265,19 @@ class Game:
             else:
                 self.fade_in_final_score()
 
+    def show_medal(self):
+        if self.medal_image is not None:
+            self.WIN.blit(self.medal_image, (86, 288))
+            self.medal_image.set_alpha(self.current_score_alpha)
+
+    def pick_medal(self):
+        if self.high_score * 0.6 < self.current_points <= self.high_score * 0.75:
+            self.medal_image = self.medals[0]
+        elif self.high_score * 0.75 < self.current_points <= self.high_score * 0.9:
+            self.medal_image = self.medals[1]
+        elif self.current_points > self.high_score * 0.9:
+            self.medal_image = self.medals[2]
+
     def update_final_score(self):
         if self.high_score <= self.current_points:
             self.high_score = self.current_points
@@ -240,11 +286,12 @@ class Game:
         for i in range(self.len_score):
             self.current_score_group.add(
                 Points(self.s, int(str(self.current_points)[i]), 0, 1,
-                       114 * self.s.SCALE - (self.len_score - i - 1) * self.small_point.w + 2, 96 * self.s.SCALE))
+                       114 * self.s.SCALE - (self.len_score - i - 1) * self.small_point.w * 0.7 + 2, 96 * self.s.SCALE))
             if self.high_score <= self.current_points:
                 self.high_score_group.add(
                     Points(self.s, int(str(self.current_points)[i]), 0, 1,
-                           114 * self.s.SCALE - (self.len_score - i - 1) * self.small_point.w + 2, 117 * self.s.SCALE))
+                           114 * self.s.SCALE - (self.len_score - i - 1) * self.small_point.w * 0.7 + 2,
+                           117 * self.s.SCALE))
 
         self.are_points_updated = True
 
@@ -260,8 +307,8 @@ class Game:
         self.current_score_alpha += 5 if self.current_score_alpha < 255 else 0
 
     def show_get_ready(self):
-        self.WIN.blit(self.GET_READY, (self.s.WIDTH//2 - self.GET_READY.get_width()//2, self.s.HEIGHT//6))
-        self.WIN.blit(self.SPACE, (self.s.WIDTH//2 - self.SPACE.get_width()//2, self.s.HEIGHT//2))
+        self.WIN.blit(self.GET_READY, (self.s.WIDTH // 2 - self.GET_READY.get_width() // 2, self.s.HEIGHT // 6))
+        self.WIN.blit(self.SPACE, (self.s.WIDTH // 2 - self.SPACE.get_width() // 2, self.s.HEIGHT // 2))
         if self.start_game is True and self.get_ready_alpha >= 0:
             self.SPACE.set_alpha(self.get_ready_alpha)
             self.GET_READY.set_alpha(self.get_ready_alpha)
@@ -271,11 +318,13 @@ class Game:
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
         if self.fading_in is True and self.i <= 255:
             for i in range(len(self.current_score_group.sprites())):
-                self.current_score_group.sprites()[i].image.set_alpha(255-self.i)
+                self.current_score_group.sprites()[i].image.set_alpha(255 - self.i)
             for i in range(len(self.high_score_group.sprites())):
-                self.high_score_group.sprites()[i].image.set_alpha(255-self.i)
+                self.high_score_group.sprites()[i].image.set_alpha(255 - self.i)
             self.RESTARTING_BG.set_alpha(self.i)
-            self.SCOREBOARD.set_alpha(255-self.i)
+            self.SCOREBOARD.set_alpha(255 - self.i)
+            if self.medal_image is not None:
+                self.medal_image.set_alpha(255 - self.i)
             self.i += 15
             if self.i == 255:
                 self.SCOREBOARD.set_alpha(255)
@@ -293,6 +342,7 @@ class Game:
 
     def stop_game(self):
         self.HIT_SOUND.play()
+        self.pick_medal()
         self.high_score = self.current_points if self.current_points > self.high_score else self.high_score
         self.s.move_pipes = False
         self.s.move_ground = False
@@ -311,6 +361,7 @@ class Game:
         self.scoreboard_y_change = 55
         self.wait_for_scoreboard = 60
         self.are_points_updated = False
+        self.medal_image = None
 
         self.bird = Bird(self, self.s)
         self.bird_group = pg.sprite.Group()
@@ -327,7 +378,6 @@ class Game:
 
 
 def main():
-
     settings = Settings()
     game = Game(settings)
 
