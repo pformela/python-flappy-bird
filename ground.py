@@ -14,6 +14,7 @@ class Ground(pg.sprite.Sprite):
         self.rect.x = 0
 
     def update(self):
+        # if moving ground is active, move it with a given speed until it reaches the edge and then reset its x position
         if self.s.is_ground_active:
             if self.rect.right <= self.s.WIDTH:
                 self.rect.x = 0

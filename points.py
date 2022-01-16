@@ -8,6 +8,7 @@ class Points(pg.sprite.Sprite):
         self.s = settings
         self.current_number = current_number
 
+        # load all number images
         self.zero = pg.image.load("assets/images/numbers/0.png")
         self.zero = pg.transform.scale(self.zero, (self.zero.get_width() * (self.s.SCALE/2 + 1),
                                                    self.zero.get_height() * (self.s.SCALE/2 + 1)))
@@ -52,6 +53,7 @@ class Points(pg.sprite.Sprite):
         self.s_nine = pg.image.load('assets/images/numbers/9-small.png')
         self.s_nine = pg.transform.scale(self.s_nine, (self.s_zero.get_width(), self.s_zero.get_height()))
 
+        # determine which size of numbers to choose for a displayed score
         if size == 0:
             self.images_list = [self.zero, self.one, self.two, self.three, self.four, self.five, self.six, self.seven,
                                 self.eight, self.nine]
@@ -64,6 +66,7 @@ class Points(pg.sprite.Sprite):
         self.image.set_alpha(alpha)
         self.rect = self.image.get_rect()
 
+        # determine which position to give upon a given size value
         if size == 0:
             self.rect.centery = self.s.HEIGHT//10
             self.rect.centerx = self.s.WIDTH//2
@@ -74,6 +77,7 @@ class Points(pg.sprite.Sprite):
         self.w = self.zero.get_width()
 
     def update(self, number=0, alpha=0, pos_x=0):
+        # updates a sprite
         self.current_number = number
         self.image = self.images_list[self.current_number]
         self.image.convert_alpha()

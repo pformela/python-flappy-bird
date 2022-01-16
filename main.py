@@ -8,6 +8,7 @@ from ground import Ground
 from pipe import Pipe
 from points import Points
 
+# Some basic mixer settings to avoid crashes
 pg.mixer.pre_init(frequency=44100)
 pg.init()
 pg.mixer.init(frequency=44100)
@@ -19,7 +20,7 @@ class Game:
 
         self.s = settings
 
-        # Initialize game
+        # Initialize game and clock
         self.clock = pg.time.Clock()
         pg.init()
 
@@ -89,7 +90,7 @@ class Game:
         self.POINT_SOUND = pg.mixer.Sound('assets/sounds/point.mp3')
         self.WHOOSH_SOUND = pg.mixer.Sound('assets/sounds/whoosh.mp3')
 
-        # Initialize game objects
+        # Initialize game objects and details
         self.current_points = 0
 
         self.small_point = Points(self.s, 0, 0, 1, 0, 0)
@@ -116,7 +117,7 @@ class Game:
                     Points(self.s, int(str(self.high_score)[i]), 0, 1,
                            114 * self.s.SCALE - (len(str(self.high_score)) - i - 1) * self.small_point.w * 0.7 + 2,
                            117 * self.s.SCALE))
-        except:
+        except FileNotFoundError:
             self.high_score = 0
 
         self.bird = Bird(self, self.s)
@@ -141,7 +142,7 @@ class Game:
 
     def handle_events(self):
         for event in pg.event.get():
-            if event.type == pg.QUIT:
+            if event.type == pg.QUIT:  # if close button is pressed - save highscore and quit
                 with open('high_score.json', 'wb') as file:
                     pickle.dump(self.high_score, file)
                 pg.quit()
@@ -150,17 +151,17 @@ class Game:
                 self.keydown_events(event)
 
     def keydown_events(self, event):
-        if event.key == pg.K_SPACE and not self.collision:
+        if event.key == pg.K_SPACE and not self.collision:  # if space is pressed, start game and motion
             self.start_game = True
             self.s.move_pipes = True
-            self.bird.initialize_ascend()
-            self.WHOOSH_SOUND.play()
-        if event.key == pg.K_r and self.collision is True and self.s.can_restart is True:
+            self.bird.initialize_ascend()  # initialize ascend function
+            self.WHOOSH_SOUND.play()  # every bird ascend initializes a sound
+        if event.key == pg.K_r and self.collision is True and self.s.can_restart is True:  # restarting conditions
             self.is_restarting = True
             self.fading_in = True
 
     def update_screen(self):
-        if self.collision is False:
+        if self.collision is False:  # update pipes and ground if there was no collision
             if self.s.move_pipes:
                 self.handle_pipes()
                 self.pipe_group.update()
@@ -177,32 +178,36 @@ class Game:
         self.bird_group.draw(self.WIN)
         self.point_group.draw(self.WIN)
 
-        if self.collision is True:
+        if self.collision is True:  # flash with white foregroung when there is a collision and draw a scoreboard
             self.flash()
             self.show_scoreboard()
             self.show_medal()
             self.current_score_group.draw(self.WIN)
             self.high_score_group.draw(self.WIN)
 
-        if self.is_restarting is True:
+        if self.is_restarting is True:  # restart if R pressed
             self.restarting()
 
-        self.show_get_ready()
+        self.show_get_ready()  # display get ready sign and image showing hot to move
 
         pg.display.flip()
         self.clock.tick(self.s.FPS)
 
     def handle_pipes(self):
+        # iterating through all the pipes on screen
         for pipe in self.pipe_group:
             index = len(self.pipe_group) - 1
 
+            # checking for the collision
             self.collision = True if pg.sprite.collide_mask(self.bird, pipe) is not None else False
             if self.collision:
                 self.stop_game()
                 break
 
+            # if last pipe is a given value of pixels away from the right side, generate new pipe
             if len(self.pipe_group) < 3 and ((self.pipe_group.sprites())[index].rect.left < self.s.new_x):
                 self.add_pipe(self.s.WIDTH, r.randrange(self.s.min_pipe_y, self.s.max_pipe_y, 30), self.s)
+            # if first pipe is beyond left side, delete it
             if pipe.rect.right < 0:
                 self.pipe_group.remove(pipe)
 
@@ -210,11 +215,13 @@ class Game:
         self.pipe_group.add(Pipe(x, y, settings))
 
     def flash(self):
+        # display a flash when a collision occurs
         self.WIN.blit(self.HIT_BG, (0, 0))
         self.HIT_BG.set_alpha(self.bird.flash_alpha)
         self.bird.flash_alpha -= 8 if self.bird.flash_alpha > 0 else 0
 
     def gain_point(self):
+        # checks if the conditions for gaining a point are met and if so, increments current_points by one
         pipe_x = (self.pipe_group.sprites())[0].rect.centerx
         if self.bird.rect.centerx >= pipe_x >= self.bird.rect.centerx - 2 and self.collision is not True:
             self.POINT_SOUND.play()
@@ -224,17 +231,20 @@ class Game:
     def update_score(self):
         for i in range(self.len_score):
             curr_sprite = self.point_group.sprites()[i]
-            self.add_digit()
+            self.add_digit()  # check whether number of sprites in a digit group is equal to digits in current score
 
-            x = self.score_digit_posx(i)
+            x = self.score_digit_posx(i)  # determines x position of a digit in a score
             if self.start_game is True or self.collision is True:
+                # fades out score when there is a collision
                 curr_sprite.update(int(str(self.current_points)[i]), self.points_alpha, x)
             else:
+                # updates digits with 0 value for opacity
                 curr_sprite.update(int(str(self.current_points)[i]), 0, x)
 
         self.fade_score()
 
     def fade_score(self):
+        # increments points alpha when game is started or decrements alpha when bird hits the ground
         if self.collision is True and self.bird.rect.bottom + 10 >= self.bird.ground_height:
             self.points_alpha -= 15 if self.points_alpha > 0 else 0
         elif self.start_game is True and self.collision is False:
@@ -252,25 +262,28 @@ class Game:
         return x
 
     def show_scoreboard(self):
+        # wait a second from a hit before displaying a scoreboard
         if self.wait_for_scoreboard > 0:
             self.wait_for_scoreboard -= 1
         else:
             self.WIN.blit(self.SCOREBOARD, (self.scoreboard_x, self.scoreboard_y))
 
-            if self.are_points_updated is False:
+            if self.are_points_updated is False:  # prepares final numbers on a scoreboard
                 self.update_final_score()
 
             if self.scoreboard_y > self.s.HEIGHT * 0.3:
-                self.move_scoreboard_up()
+                self.move_scoreboard_up()  # increments scoreboard y position until it gets to a predefined height
             else:
                 self.fade_in_final_score()
 
     def show_medal(self):
+        # shows the medal on the scoreboard if it was picked
         if self.medal_image is not None:
             self.WIN.blit(self.medal_image, (86, 288))
             self.medal_image.set_alpha(self.current_score_alpha)
 
     def pick_medal(self):
+        # determines which medal to choose
         if self.high_score * 0.6 < self.current_points <= self.high_score * 0.75:
             self.medal_image = self.medals[0]
         elif self.high_score * 0.75 < self.current_points <= self.high_score * 0.9:
@@ -279,6 +292,7 @@ class Game:
             self.medal_image = self.medals[2]
 
     def update_final_score(self):
+        # initialize high score group of digits when it is equal of higher than previous high score
         if self.high_score <= self.current_points:
             self.high_score = self.current_points
             self.high_score_group = pg.sprite.Group()
@@ -293,13 +307,15 @@ class Game:
                            114 * self.s.SCALE - (self.len_score - i - 1) * self.small_point.w * 0.7 + 2,
                            117 * self.s.SCALE))
 
-        self.are_points_updated = True
+        self.are_points_updated = True  # sets the flag to true in order to update if only once
 
     def move_scoreboard_up(self):
+        # change the y position of scoreboard while fading in
         self.scoreboard_y -= self.scoreboard_y_change
         self.scoreboard_y_change -= 2.5
 
     def fade_in_final_score(self):
+        # change the alpha of current score and high score after scoreboard stops moving
         for i in range(len(self.current_score_group.sprites())):
             self.current_score_group.sprites()[i].image.set_alpha(self.current_score_alpha)
         for i in range(len(self.high_score_group.sprites())):
@@ -307,6 +323,7 @@ class Game:
         self.current_score_alpha += 5 if self.current_score_alpha < 255 else 0
 
     def show_get_ready(self):
+        # show get ready sign and instructions until bird starts moving
         self.WIN.blit(self.GET_READY, (self.s.WIDTH // 2 - self.GET_READY.get_width() // 2, self.s.HEIGHT // 6))
         self.WIN.blit(self.SPACE, (self.s.WIDTH // 2 - self.SPACE.get_width() // 2, self.s.HEIGHT // 2))
         if self.start_game is True and self.get_ready_alpha >= 0:
@@ -315,6 +332,7 @@ class Game:
             self.get_ready_alpha -= 15
 
     def restarting(self):
+        # initialize restarting sequence of fading previous elements out and fading in starting game elements
         self.WIN.blit(self.RESTARTING_BG, (0, 0))
         if self.fading_in is True and self.i <= 255:
             for i in range(len(self.current_score_group.sprites())):
@@ -341,6 +359,7 @@ class Game:
             self.is_restarting = False
 
     def stop_game(self):
+        # change flags when a collision occurs
         self.HIT_SOUND.play()
         self.pick_medal()
         self.high_score = self.current_points if self.current_points > self.high_score else self.high_score
@@ -350,6 +369,7 @@ class Game:
         self.s.is_bird_animating = False
 
     def initialize(self):
+        # initialize variables, flags and group when restarting
         self.current_points = 0
         self.len_score = 1
         self.current_score_group = pg.sprite.Group()

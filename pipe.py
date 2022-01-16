@@ -16,4 +16,5 @@ class Pipe(pg.sprite.Sprite):
         self.rect.x, self.rect.y = pos_x, pos_y
 
     def update(self):
+        # update a sprite with given speed
         self.rect.x -= self.s.objects_speed
